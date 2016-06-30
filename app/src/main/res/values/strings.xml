@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Location App</string>
+    <string name="title_activity_main">My Location</string>
+    <string name="suanki_konumunuz">Şuanki Konumunuz</string>
+    <string name="koordinatlar" translatable="false">%1$f %2$f</string>
+    <string name="service_name">Location Service</string>
+</resources>

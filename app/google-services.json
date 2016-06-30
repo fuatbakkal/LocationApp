@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "688792968628",
+    "firebase_url": "https://kou-location-app.firebaseio.com",
+    "project_id": "kou-location-app",
+    "storage_bucket": "kou-location-app.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:688792968628:android:2d640124542cc303",
+        "android_client_info": {
+          "package_name": "com.fuat.locationapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "688792968628-mmpoj9grba4f3gjs5gcata1rr9jh90ti.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fuat.locationapp",
+            "certificate_hash": "C4B0E414899E1A75AA3EDBBBCE354FEC407EDE9D"
+          }
+        },
+        {
+          "client_id": "688792968628-9127haoob7jhf0h33gb0913tgei8t3n7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCr5U5f9nCEJVpWpxFCnfCuXS48Pyy0GvA"
+        }
+      ],
+      "services": {
+        "analytics_service": {
+          "status": 1
+        },
+        "appinvite_service": {
+          "status": 2,
+          "other_platform_oauth_client": [
+            {
+              "client_id": "688792968628-9127haoob7jhf0h33gb0913tgei8t3n7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        },
+        "ads_service": {
+          "status": 2
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
