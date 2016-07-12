@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentActivity;
@@ -20,23 +21,32 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends FragmentActivity implements OnMapReadyCallback {
     private GoogleMap googleMap;
     private Marker marker;
     private FirebaseAuth mAuth;
     private FirebaseAuth.AuthStateListener mAuthListener;
-    // private DatabaseReference mDatabase;
+    private DatabaseReference mDatabase;
+    private List<Nodes> nodes = new ArrayList<Nodes>();
 
     private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
         @Override
@@ -111,8 +121,31 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                     }
                 });
 
-        // Get database referance
-        //mDatabase = FirebaseDatabase.getInstance().getReference();
+        // Get database reference
+        mDatabase = FirebaseDatabase.getInstance().getReference();
+
+        mDatabase.child("locations").addListenerForSingleValueEvent(
+                new ValueEventListener() {
+                    @Override
+                    public void onDataChange(DataSnapshot dataSnapshot) {
+                        int i = 0;
+                        PolylineOptions strokes = new PolylineOptions();
+                        for (DataSnapshot child : dataSnapshot.getChildren()) {
+                            nodes.add(new Nodes(Double.parseDouble(child.child("latitude").getValue().toString()),
+                                    Double.parseDouble(child.child("longitude").getValue().toString())));
+                            googleMap.addMarker(new MarkerOptions().position(nodes.get(i).getlatLng()).title(".").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+                            strokes.add(nodes.get(i++).getlatLng());
+                            //Log.i("ASD123", nodes.get(0).getLatitude()+" ");
+                        }
+                        strokes.width(5).color(Color.BLUE).geodesic(true);
+                        googleMap.addPolyline(strokes);
+                    }
+
+                    @Override
+                    public void onCancelled(DatabaseError databaseError) {
+                        Log.w("DB" + Constants.TAG, "getUser:onCancelled", databaseError.toException());
+                    }
+                });
 
         // Start LocationService
         Intent i = new Intent(this, LocationService.class);
@@ -123,7 +156,6 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
     protected void onResume() {
         super.onResume();
         LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, new IntentFilter(Constants.SERVICE_ACTION));
-
     }
 
     @Override
@@ -155,6 +187,12 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
 
         // Add this marker to the map
         this.googleMap.addMarker(markerAtKou);
+
+
+
+        /*for (int i = 0; i < nodes.size(); i++) {
+            this.googleMap.addMarker(new MarkerOptions().position(nodes.get(i).getlatLng()).title(".").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+        }*/
     }
 
     // TODO: 22.06.2016 Will be used for logging to sdcard
