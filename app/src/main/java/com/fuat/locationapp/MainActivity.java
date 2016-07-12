@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentActivity;
@@ -26,8 +25,6 @@ import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -35,21 +32,18 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 public class MainActivity extends FragmentActivity implements OnMapReadyCallback {
-    public static SQLiteDatabase locationsDB;
     private GoogleMap googleMap;
     private Marker marker;
     private FirebaseAuth mAuth;
     private FirebaseAuth.AuthStateListener mAuthListener;
-    private DatabaseReference mDatabase;
+    // private DatabaseReference mDatabase;
 
     private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+
             double latitude = intent.getDoubleExtra("latitude", 0.0);
             double longitude = intent.getDoubleExtra("longitude", 0.0);
-            long datetime = System.currentTimeMillis();
-            mDatabase.child("locations").child(Long.toString(datetime)).child("latitude").setValue(latitude);
-            mDatabase.child("locations").child(Long.toString(datetime)).child("longitude").setValue(longitude);
 
             Toast.makeText(getApplicationContext(), "Location Changed: " + Double.toString(latitude) + ", "
                     + Double.toString(longitude), Toast.LENGTH_LONG).show();
@@ -74,7 +68,6 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        locationsDB = openOrCreateDatabase("locations", MODE_PRIVATE, null);
         setContentView(R.layout.activity_main);
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
@@ -119,7 +112,7 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                 });
 
         // Get database referance
-        mDatabase = FirebaseDatabase.getInstance().getReference();
+        //mDatabase = FirebaseDatabase.getInstance().getReference();
 
         // Start LocationService
         Intent i = new Intent(this, LocationService.class);
