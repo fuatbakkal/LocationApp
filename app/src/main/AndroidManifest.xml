@@ -17,13 +17,19 @@
             android:value="@string/google_maps_key" />
 
         <activity
-            android:name="com.fuat.locationapp.MainActivity"
+            android:name="com.fuat.locationapp.AuthUiActivity"
             android:label="@string/title_activity_main"
             android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name="com.fuat.locationapp.MainActivity"
+            android:label="@string/title_activity_main"
+            android:screenOrientation="portrait">
         </activity>
 
         <service android:name="com.fuat.locationapp.LocationService" android:exported="false" />

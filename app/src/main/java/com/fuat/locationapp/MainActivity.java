@@ -6,14 +6,19 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.android.gms.maps.CameraUpdateFactory;
+import com.akexorcist.googledirection.DirectionCallback;
+import com.akexorcist.googledirection.GoogleDirection;
+import com.akexorcist.googledirection.constant.RequestResult;
+import com.akexorcist.googledirection.model.Direction;
+import com.akexorcist.googledirection.model.Leg;
+import com.akexorcist.googledirection.model.Route;
+import com.akexorcist.googledirection.util.DirectionConverter;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
@@ -22,31 +27,20 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.auth.AuthResult;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends FragmentActivity implements OnMapReadyCallback {
     private GoogleMap googleMap;
     private Marker marker;
-    private FirebaseAuth mAuth;
-    private FirebaseAuth.AuthStateListener mAuthListener;
     private DatabaseReference mDatabase;
-    private List<Nodes> nodes = new ArrayList<Nodes>();
+    private List<Nodes> nodes = new ArrayList<>();
 
     private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
         @Override
@@ -69,9 +63,7 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
             TextView text = (TextView) findViewById(R.id.textView);
             String locationText = getString(R.string.koordinatlar, latitude, longitude);
             text.setText(locationText);
-            googleMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
-            //googleMap.animateCamera(CameraUpdateFactory.zoomTo(15));
-            // appendLog(DateFormat.getDateTimeInstance().format(new Date()) + " -> Location: " + latitude +  "," + longitude, Constants.LOG_APP);
+            //googleMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
         }
     };
 
@@ -81,45 +73,6 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         setContentView(R.layout.activity_main);
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-
-        // Firebase DB Auth
-        mAuth = FirebaseAuth.getInstance();
-        mAuthListener = new FirebaseAuth.AuthStateListener() {
-            @Override
-            public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
-                FirebaseUser user = firebaseAuth.getCurrentUser();
-                if (user != null) {
-                    // User is signed in
-                    Log.d(Constants.TAG, "onAuthStateChanged:signed_in:" + user.getUid());
-                } else {
-                    // User is signed out
-                    Log.d(Constants.TAG, "onAuthStateChanged:signed_out");
-                }
-                // ...
-            }
-        };
-
-        // Add Auth State Listener
-        mAuth.addAuthStateListener(mAuthListener);
-
-        // Sign-in Anonymously
-        mAuth.signInAnonymously()
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        Log.d(Constants.TAG, "signInAnonymously:onComplete:" + task.isSuccessful());
-
-                        // If sign in fails, display a message to the user. If sign in succeeds
-                        // the auth state listener will be notified and logic to handle the
-                        // signed in user can be handled in the listener.
-                        if (!task.isSuccessful()) {
-                            Log.w(Constants.TAG, "signInAnonymously", task.getException());
-                            Toast.makeText(MainActivity.this, "Authentication failed.",
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                        // ...
-                    }
-                });
 
         // Get database reference
         mDatabase = FirebaseDatabase.getInstance().getReference();
@@ -135,7 +88,6 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                                     Double.parseDouble(child.child("longitude").getValue().toString())));
                             googleMap.addMarker(new MarkerOptions().position(nodes.get(i).getlatLng()).title(".").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
                             strokes.add(nodes.get(i++).getlatLng());
-                            //Log.i("ASD123", nodes.get(0).getLatitude()+" ");
                         }
                         strokes.width(5).color(Color.BLUE).geodesic(true);
                         googleMap.addPolyline(strokes);
@@ -144,6 +96,32 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                     @Override
                     public void onCancelled(DatabaseError databaseError) {
                         Log.w("DB" + Constants.TAG, "getUser:onCancelled", databaseError.toException());
+                    }
+                });
+
+        String serverKey = "AIzaSyCJD59Y6U-R-MJ-yBv6E3Uh4_yCkor2B9U";
+        LatLng origin = new LatLng(40.823650, 29.921951);
+        LatLng destination = new LatLng(40.7734484, 29.9837398);
+
+        GoogleDirection.withServerKey(serverKey)
+                .from(origin)
+                .to(destination)
+                .execute(new DirectionCallback() {
+                    @Override
+                    public void onDirectionSuccess(Direction direction, String rawBody) {
+                        if (direction.getStatus().equals(RequestResult.OK)) {
+                            Route route = direction.getRouteList().get(0);
+                            Leg leg = route.getLegList().get(0);
+                            ArrayList<LatLng> pointList = leg.getDirectionPoint();
+
+                            PolylineOptions polylineOptions = DirectionConverter.createPolyline(getApplicationContext(), pointList, 5, Color.RED);
+                            googleMap.addPolyline(polylineOptions);
+                        }
+                    }
+
+                    @Override
+                    public void onDirectionFailure(Throwable t) {
+                        // ...
                     }
                 });
 
@@ -162,9 +140,6 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
     protected void onPause() {
         super.onPause();
         LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver);
-        if (mAuthListener != null) {
-            mAuth.removeAuthStateListener(mAuthListener);
-        }
     }
 
     @Override
@@ -187,33 +162,5 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
 
         // Add this marker to the map
         this.googleMap.addMarker(markerAtKou);
-
-
-
-        /*for (int i = 0; i < nodes.size(); i++) {
-            this.googleMap.addMarker(new MarkerOptions().position(nodes.get(i).getlatLng()).title(".").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
-        }*/
-    }
-
-    // TODO: 22.06.2016 Will be used for logging to sdcard
-    public void appendLog(String text, String filename) {
-        File logFile = new File(filename);
-
-        if (!logFile.exists()) {
-            try {
-                logFile.createNewFile();
-            } catch (IOException e) {
-                Toast.makeText(this, "Could't create log file!", Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        try {
-            BufferedWriter buf = new BufferedWriter(new FileWriter(logFile, true));
-            buf.append(text);
-            buf.newLine();
-            buf.close();
-        } catch (IOException e) {
-            Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
     }
 }
