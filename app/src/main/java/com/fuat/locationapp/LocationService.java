@@ -5,19 +5,23 @@ import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.os.Bundle;
-import android.os.CountDownTimer;
 import android.os.IBinder;
 import android.support.annotation.NonNull;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.places.PlaceLikelihoodBuffer;
+import com.google.android.gms.location.places.Places;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 
@@ -27,25 +31,12 @@ public class LocationService extends Service implements
         LocationListener {
 
     private boolean currentlyProcessingLocation = false;
-    private GoogleApiClient googleApiClient;
-    private LocalBroadcastManager lbm = LocalBroadcastManager.getInstance(this);
-    private Intent intent = new Intent(Constants.SERVICE_ACTION);
-    private Location previousLocation = null;
+    private GoogleApiClient mGoogleApiClient;
+    private LocalBroadcastManager mLbm = LocalBroadcastManager.getInstance(this);
+    private Intent mIntent = new Intent(Constants.SERVICE_ACTION);
     private DatabaseReference mDatabase;
-
-    private CountDownTimer timer = new CountDownTimer(600000, 1000) {
-        @Override
-        public void onTick(long l) {
-            // ...
-        }
-
-        @Override
-        public void onFinish() {
-            long datetime = System.currentTimeMillis();
-            mDatabase.child("locations").child(Long.toString(datetime)).child("latitude").setValue(previousLocation.getLatitude());
-            mDatabase.child("locations").child(Long.toString(datetime)).child("longitude").setValue(previousLocation.getLongitude());
-        }
-    };
+    private MyPlace previousPlace = null, currentPlace = null;
+    private FirebaseUser user;
 
     @Override
     public void onCreate() {
@@ -55,12 +46,17 @@ public class LocationService extends Service implements
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         mDatabase = FirebaseDatabase.getInstance().getReference();
+        user = FirebaseAuth.getInstance().getCurrentUser();
+
+        mDatabase.child("users").child(user.getUid()).child("name").setValue(user.getDisplayName());
+        mDatabase.child("users").child(user.getUid()).child("e-mail").setValue(user.getEmail());
 
         if (!currentlyProcessingLocation) {
             currentlyProcessingLocation = true;
             startTracking();
         }
-        return START_NOT_STICKY;
+
+        return START_STICKY;
     }
 
     public boolean isGooglePlayServicesAvailable(Context context) {
@@ -73,14 +69,16 @@ public class LocationService extends Service implements
         Log.d(Constants.TAG, "startTracking");
 
         if (isGooglePlayServicesAvailable(this)) {
-            googleApiClient = new GoogleApiClient.Builder(this)
+            mGoogleApiClient = new GoogleApiClient.Builder(this)
+                    .addApi(Places.GEO_DATA_API)
+                    .addApi(Places.PLACE_DETECTION_API)
                     .addApi(LocationServices.API)
                     .addConnectionCallbacks(this)
                     .addOnConnectionFailedListener(this)
                     .build();
 
-            if (!googleApiClient.isConnected() || !googleApiClient.isConnecting()) {
-                googleApiClient.connect();
+            if (!mGoogleApiClient.isConnected() || !mGoogleApiClient.isConnecting()) {
+                mGoogleApiClient.connect();
             }
 
         } else {
@@ -99,26 +97,34 @@ public class LocationService extends Service implements
     }
 
     @Override
-    public void onLocationChanged(Location location) {
-        if (location != null) {
-            Log.v(Constants.TAG, "position: " + location.getLatitude() + ", " + location.getLongitude() + " accuracy: " + location.getAccuracy());
+    public void onLocationChanged(Location currentLocation) {
+        if (currentLocation != null) {
+            mIntent.putExtra("latitude", currentLocation.getLatitude());
+            mIntent.putExtra("longitude", currentLocation.getLongitude());
+            mLbm.sendBroadcast(mIntent);
 
-            intent.putExtra("latitude", location.getLatitude());
-            intent.putExtra("longitude", location.getLongitude());
-            lbm.sendBroadcast(intent);
+            long dateTime = System.currentTimeMillis();
+            mDatabase.child("users").child(user.getUid()).child("current_location").child("latitude").setValue(currentLocation.getLatitude());
+            mDatabase.child("users").child(user.getUid()).child("current_location").child("longitude").setValue(currentLocation.getLongitude());
+            guessCurrentPlace();
 
-            if (isBetterLocation(location, previousLocation)) {
-                previousLocation = location;
-                timer.cancel();
-                timer.start();
+            if (isNewPlace(currentPlace, previousPlace)) {
+                mDatabase.child("places").child(currentPlace.getId()).child("name").setValue(currentPlace.getName());
+                mDatabase.child("places").child(currentPlace.getId()).child("latitude").setValue(currentPlace.getLatitude());
+                mDatabase.child("places").child(currentPlace.getId()).child("longitude").setValue(currentPlace.getLongitude());
+                mDatabase.child("places").child(currentPlace.getId()).child("visitors").child(String.valueOf(dateTime)).setValue(user.getUid());
+                mDatabase.child("users").child(user.getUid()).child("visited_places").child(String.valueOf(dateTime)).setValue(currentPlace.getId());
+                previousPlace = currentPlace;
             }
+
+            Log.v(Constants.TAG, "position: " + currentLocation.getLatitude() + ", " + currentLocation.getLongitude() + " accuracy: " + currentLocation.getAccuracy());
         }
     }
 
     private void stopLocationUpdates() {
-        if (googleApiClient != null && googleApiClient.isConnected()) {
+        if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
             Log.d(Constants.TAG, "stopLocationUpdates");
-            googleApiClient.disconnect();
+            mGoogleApiClient.disconnect();
         }
     }
 
@@ -132,26 +138,50 @@ public class LocationService extends Service implements
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
         try {
-            LocationServices.FusedLocationApi.requestLocationUpdates(this.googleApiClient, locationRequest, this);
+            LocationServices.FusedLocationApi.requestLocationUpdates(this.mGoogleApiClient, locationRequest, this);
         } catch (SecurityException e) {
-            Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
+            Log.e(Constants.TAG, e.getLocalizedMessage());
         }
     }
 
     @Override
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-        Log.e(Constants.TAG, "onConnectionFailed");
         stopLocationUpdates();
         stopSelf();
+        Log.e(Constants.TAG, "onConnectionFailed");
     }
 
     @Override
     public void onConnectionSuspended(int i) {
-        Log.e(Constants.TAG, "GoogleApiClient connection has been suspend");
+        Log.e(Constants.TAG, "GoogleApiClient connection has been suspended");
     }
 
-    private boolean isBetterLocation(Location currentLocation, Location previousLocation) {
+    private boolean isNewPlace(MyPlace currentPlace, MyPlace previousPlace) {
+        if(previousPlace == null && currentPlace != null) return true;
+        if(previousPlace != null && currentPlace != null) return !currentPlace.equals(previousPlace);
 
-        return previousLocation == null || currentLocation.distanceTo(previousLocation) >= Constants.DISTANCE_GAP;
+        return false;
+    }
+
+    private void guessCurrentPlace() {
+        try {
+            PendingResult<PlaceLikelihoodBuffer> result = Places.PlaceDetectionApi.getCurrentPlace(mGoogleApiClient, null);
+
+            result.setResultCallback(new ResultCallback<PlaceLikelihoodBuffer>() {
+                @Override
+                public void onResult(@NonNull PlaceLikelihoodBuffer placeLikelihoods) {
+
+                    if (placeLikelihoods.getCount() > 0) {
+                        currentPlace = new MyPlace(placeLikelihoods.get(0).getPlace().getId(),
+                                placeLikelihoods.get(0).getPlace().getName().toString(),
+                                placeLikelihoods.get(0).getPlace().getLatLng());
+                    }
+
+                    placeLikelihoods.release();
+                }
+            });
+        } catch (SecurityException e) {
+            Log.e(Constants.TAG, e.getLocalizedMessage());
+        }
     }
 }
